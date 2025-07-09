@@ -1,7 +1,7 @@
 # mxm-secrets
 
-![Version](https://img.shields.io/github/v/tag/YOUR_USERNAME/mxm-secrets)
-![License](https://img.shields.io/github/license/YOUR_USERNAME/mxm-secrets)
+![Version](https://img.shields.io/github/v/tag/moneyexmachina/mxm-secrets)
+![License](https://img.shields.io/github/license/moneyexmachina/mxm-secrets)
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
 
 A minimal, pluggable Python interface to encrypted secrets — built for the [Money Ex Machina](https://moneyexmachina.com) stack, powered by [`gopass`](https://www.gopass.pw).
