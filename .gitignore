@@ -1,0 +1,48 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Poetry
+poetry.lock
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# VS Code / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MacOS metadata
+.DS_Store
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+
+# MyPy, coverage, profiling, etc.
+.mypy_cache/
+.cache/
+.pyre/
+.dmypy.json
+.pytype/
+
+# Secret config (if any)
+.env
+.env.*
+secrets.toml
