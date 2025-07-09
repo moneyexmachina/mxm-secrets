@@ -1,27 +1,27 @@
-[project]
+[tool.poetry]
 name = "mxm-secrets"
 version = "0.1.0"
-description = "Secrets interface for Money Ex Machina"
-authors = [
-    {name = "mxm",email = "contact@moneyexmachina.com"}
-]
-license = {text = "MIT"}
+description = "Minimal secrets interface for Money Ex Machina, supporting gopass and env backends"
+authors = ["mxm <contact@moneyexmachina.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "pytest (>=8.4.1,<9.0.0)",
-    "click (>=8.2.1,<9.0.0)"
-]
+packages = [{ include = "mxm_secrets" }]
+keywords = ["secrets", "gopass", "environment", "cli", "mxm"]
+homepage = "https://moneyexmachina.com"
+repository = "https://github.com/moneyexmachina/mxm-secrets"
+documentation = "https://moneyexmachina.com/docs/mxm-secrets"
 
-[tool.poetry]
-
-[tool.poetry.scripts]
-mxm-secrets = "mxm_secrets.__main__:main"
+[tool.poetry.dependencies]
+python = ">=3.12"
+click = "^8.2.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
-ruff = "^0.12.0"
+ruff = "^0.4.4"
 pytest = "^8.4.1"
+
+[tool.poetry.scripts]
+mxm-secrets = "mxm_secrets.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
