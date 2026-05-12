@@ -1,45 +1,51 @@
-# Byte-compiled / cache
+# managed: mxm-foundry:begin gitignore v1
+
+# Python / builds
 __pycache__/
 *.py[cod]
-*.so
-*.pyd
 *.pyo
+*.pyd
+build/
+dist/
+.eggs/
+*.egg-info/
 
-# Virtual environments
+# Virtual envs
 .venv/
-env/
-venv/
+.env/
+.envrc
 
-# Pytest
+# Tool caches & reports
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
-
-# VS Code / IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# MacOS metadata
-.DS_Store
-
-# Distribution / packaging
-*.egg-info/
-dist/
-build/
-
-# Logs
-*.log
-
-# MyPy, coverage, profiling, etc.
+.pyright/
 .mypy_cache/
+.ruff_cache/
 .cache/
-.pyre/
-.dmypy.json
-.pytype/
+
+# Editors/OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Poetry local files
+.poetry/
+
+# Node (if templates ever ship web bits)
+node_modules/
+
+# Generated artifacts (docs, etc.)
+site/
+docs/_build/
+
+# end: mxm-foundry:end
 
 # Secret config (if any)
 .env
 .env.*
 secrets.toml
+
+
