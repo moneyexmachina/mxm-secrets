@@ -1,7 +1,7 @@
-"""mxm_secrets.api
+"""mxm.secrets.api
 
-This module provides the public API surface for secrets access within the 
-Money Ex Machina infrastructure. All MXM packages should retrieve secrets 
+This module provides the public API surface for secrets access within the
+Money Ex Machina infrastructure. All MXM packages should retrieve secrets
 exclusively through `get_secret(...)` defined here.
 
 Philosophy:
@@ -24,34 +24,44 @@ Future plans:
 - Add support for Vault, Age, and runtime session backends
 
 Example:
-    from mxm_secrets import get_secret
+    from mxm.secrets import get_secret
 
     api_key = get_secret("prod/some-api-key")
 
 Do not use backend modules directly; rely on this interface for all access.
 """
 
-from typing import Optional, Callable
-from mxm_secrets.backends import gopass_backend, env_backend
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from mxm.secrets.backends import env_backend, gopass_backend
+
+AccessFn = Callable[[str, str | None], str | None]
+CheckFn = Callable[[], bool]
 
 
-# Static backend priority (to be moved into mxm-config)
+@dataclass(frozen=True)
+class Backend:
+    access: AccessFn
+    check: CheckFn
+
+
 _BACKEND_PRIORITY = ["gopass", "env"]
 
 
-_BACKEND_DISPATCH: dict[str, dict[str, Callable]] = {
-    "gopass": {
-        "access": gopass_backend.access_secret,
-        "check": gopass_backend.is_gopass_available,
-    },
-    "env": {
-        "access": env_backend.access_secret,
-        "check": lambda: True,
-    },
+_BACKEND_DISPATCH: dict[str, Backend] = {
+    "gopass": Backend(
+        access=gopass_backend.access_secret,
+        check=gopass_backend.is_gopass_available,
+    ),
+    "env": Backend(
+        access=env_backend.access_secret,
+        check=lambda: True,
+    ),
 }
 
 
-def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
+def get_secret(key: str, default: str | None = None) -> str | None:
     """
     Retrieve a secret from the configured backend chain.
 
@@ -67,14 +77,17 @@ def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
     Raises:
         ValueError: If an unknown backend is listed in _BACKEND_PRIORITY.
     """
-    for backend in _BACKEND_PRIORITY:
-        if backend not in _BACKEND_DISPATCH:
-            raise ValueError(f"Unknown backend: {backend}")
 
-        if not _BACKEND_DISPATCH[backend]["check"]():
+    for backend_name in _BACKEND_PRIORITY:
+        if backend_name not in _BACKEND_DISPATCH:
+            raise ValueError(f"Unknown backend: {backend_name}")
+
+        backend = _BACKEND_DISPATCH[backend_name]
+
+        if not backend.check():
             continue
 
-        result = _BACKEND_DISPATCH[backend]["access"](key, None)
+        result = backend.access(key, None)
         if result is not None:
             return result
 
@@ -87,9 +100,14 @@ def check_backend_ready() -> bool:
 
     Useful for CLI diagnostics or startup assertions.
     """
-    for backend in _BACKEND_PRIORITY:
-        if backend not in _BACKEND_DISPATCH:
+
+    for backend_name in _BACKEND_PRIORITY:
+        if backend_name not in _BACKEND_DISPATCH:
             continue
-        if _BACKEND_DISPATCH[backend]["check"]():
+
+        backend = _BACKEND_DISPATCH[backend_name]
+
+        if backend.check():
             return True
+
     return False

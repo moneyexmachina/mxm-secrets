@@ -1,26 +1,85 @@
 # mxm-secrets
-
-![Version](https://img.shields.io/github/v/tag/moneyexmachina/mxm-secrets)
+![Version](https://img.shields.io/github/v/release/moneyexmachina/mxm-secrets)
 ![License](https://img.shields.io/github/license/moneyexmachina/mxm-secrets)
-![Python](https://img.shields.io/badge/python-3.12+-blue)
+![Python](https://img.shields.io/badge/python-3.13+-blue)
+[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
-A minimal, pluggable Python interface to encrypted secrets — built for the [Money Ex Machina](https://moneyexmachina.com) stack, powered by [`gopass`](https://www.gopass.pw).
+A typed, minimal, pluggable Python interface for operational secret access within the Money Ex Machina ecosystem.
 
----
+Built around explicit, scoped secret retrieval using [`gopass`](https://www.gopass.pw), with support for additional backends and deployment environments over time.
+
+## Purpose
+
+`mxm-secrets` provides the canonical secret access layer for MXM packages.
+
+The package exists to separate:
+
+```text
+application code
+```
+
+from:
+
+```text
+secret storage and operational credential management
+```
+
+MXM packages should never:
+
+- hardcode secrets,
+- preload global credential blobs,
+- depend directly on backend implementations,
+- or assume a particular secret storage mechanism.
+
+Instead, packages retrieve secrets explicitly:
+
+```python
+from mxm.secrets import get_secret
+
+api_key = get_secret("prod/some-api-key")
+```
+
+This establishes:
+
+- explicit dependency boundaries,
+- process-local secret access,
+- backend composability,
+- operational portability,
+- and testable infrastructure interfaces.
 
 ## Philosophy
 
-* **Explicit**: Secrets must be requested by name (`get_secret()`), not preloaded or injected globally.
-* **Scoped**: Each runtime process loads only the secrets it needs.
-* **Composable**: Works cleanly in Unix-style environments, CLI scripts, and REPL workflows.
-* **Pluggable**: Supports `gopass` and environment variable backends today; Vault and Age are future-compatible.
-* **Minimal**: No third-party dependencies. Pure Python interface. Fully testable.
+### Explicit
 
----
+Secrets must be requested individually by name.
+
+No global credential injection or hidden runtime state.
+
+### Scoped
+
+Each process retrieves only the secrets it requires.
+
+### Composable
+
+Designed for Unix-style workflows, automation pipelines, REPLs, and distributed runtime environments.
+
+### Pluggable
+
+Supports multiple backend implementations behind a stable API surface.
+
+### Minimal
+
+Small dependency surface, strict typing, and reproducible operational behavior.
 
 ## Installation
 
-Install from source:
+Install from PyPI:
+
+```bash
+poetry add mxm-secrets
+```
+
+Or install from source:
 
 ```bash
 git clone https://github.com/moneyexmachina/mxm-secrets.git
@@ -28,63 +87,92 @@ cd mxm-secrets
 poetry install
 ```
 
-Or add to your project:
-
-```bash
-poetry add git+https://github.com/moneyexmachina/mxm-secrets.git
-```
-
----
-
 ## Usage
 
-Use in your Python code:
+### Python API
 
 ```python
-from mxm_secrets import get_secret
+from mxm.secrets import get_secret
 
-api_key = get_secret("mxm/dev/api-key", default="changeme")
+api_key = get_secret("mxm/dev/api-key")
+smtp_password = get_secret("prod/smtp-password", default="changeme")
 ```
 
-Or via the CLI:
+### CLI Usage
+
+Retrieve a secret:
 
 ```bash
-poetry run python -m mxm_secrets get mxm/dev/api-key
+python -m mxm.secrets get mxm/dev/api-key
 ```
 
----
+With fallback value:
 
-### Secret Resolution Logic
+```bash
+python -m mxm.secrets get mxm/dev/api-key --default "changeme"
+```
 
-When you call `get_secret("mxm/dev/api-key")`, the system attempts:
+Verbose mode:
 
-1. `gopass show mxm/dev/api-key`
-2. `os.environ.get("MXM_DEV_API_KEY")`.
-3. If not found, return `None` or the `default` value if provided.
+```bash
+python -m mxm.secrets get mxm/dev/api-key --verbose
+```
 
----
+## Secret Resolution Logic
+
+When:
+
+```python
+get_secret("mxm/dev/api-key")
+```
+
+is called, the package attempts resolution using configured backends in priority order.
+
+Current default order:
+
+1. `gopass`
+2. environment variables
+
+Example:
+
+```text
+mxm/dev/api-key
+```
+
+maps to:
+
+```bash
+gopass show mxm/dev/api-key
+```
+
+and environment fallback:
+
+```text
+MXM_DEV_API_KEY
+```
+
+If no backend resolves the secret:
+
+- the provided `default` value is returned,
+- otherwise `None`.
 
 ## Secret Store Layout
 
-Secrets are organized in a [gopass mount](https://www.gopass.pw/docs/features/mounts/) called `mxm`, separated by purpose or environment:
+Typical `gopass` structure:
 
-```
+```text
 mxm/
 ├── prod/
 │   └── email-password
 ├── dev/
 │   └── test-api-key
 ├── runtime/
-├── bootstrap/
+└── bootstrap/
 ```
 
-Each subfolder can have its own `.gpg-id` file, allowing access control per environment:
+Each subtree may use separate `.gpg-id` files for scoped access control.
 
-* `dev/`: accessible to `mxm@my_dev_box`
-* `prod/`: encrypted to `mxm@my_prod_box`
-* `runtime/`, `bootstrap/`: optionally multi-user
-
-Write secrets like this:
+Example:
 
 ```bash
 gopass insert mxm/dev/test-api-key
@@ -92,79 +180,111 @@ gopass insert mxm/dev/test-api-key
 
 ---
 
-## Configuration
-
-No configuration is required beyond setting up `gopass`:
-
-* Install and initialize `gopass`
-* Ensure your GPG key is trusted and unlocked
-* Clone or mount the correct secrets store (e.g. `~/.mxm-secrets-store`)
-* Set `.gpg-id` files appropriately per environment
-
----
-
 ## Available Backends
 
-| Backend     | Status                 | Description                                  |
-| ----------- | ---------------------- | -------------------------------------------- |
-| `gopass`    | ✅ Stable               | Primary backend using local GPG encryption   |
-| Environment | ✅ Supported (fallback) | Uses uppercased env vars                     |
-| `age`       | 🕸️ Planned            | For lightweight, file-based secret sharing   |
-| Vault       | 🕸️ Future-compatible  | For centralized secure secret infrastructure |
+| Backend       | Status      | Description                              |
+|----------------|-------------|------------------------------------------|
+| `gopass`       | Stable      | Local encrypted secret storage via GPG  |
+| Environment    | Stable      | Environment variable fallback backend    |
+| `age`          | Planned     | File-based encrypted secret backend      |
+| Vault          | Planned     | Centralized secret infrastructure        |
 
----
+## Configuration
 
-## CLI Commands
+Current backend priority is statically defined inside the package.
 
-### Get a secret
+Future versions will support configuration through:
 
-```bash
-poetry run python -m mxm_secrets get mxm/dev/api-key
+```text
+mxm-config
 ```
 
-With fallback:
+Planned future capabilities:
 
-```bash
-poetry run python -m mxm_secrets get mxm/dev/api-key --default "changeme"
-```
-
-Verbose mode (prints gopass errors):
-
-```bash
-poetry run python -m mxm_secrets get mxm/dev/api-key --verbose
-```
-
----
-
-## Tests
-
-Run the full test suite:
-
-```bash
-poetry run pytest
-```
-
-Includes tests for:
-
-* API dispatch and fallback logic
-* Backend integration
-* CLI interface (via `click.testing.CliRunner`)
-
----
+- configurable backend ordering,
+- runtime session backends,
+- Vault integration,
+- Age integration,
+- deployment-specific backend chains.
 
 ## Security Notes
 
-This package does not store, cache, or globally export any secrets. Secrets are retrieved on demand, scoped to the current process.
+`mxm-secrets`:
 
----
+- does not cache secrets,
+- does not preload credentials,
+- does not globally export secrets,
+- does not persist runtime secret state.
+
+Secrets remain external to MXM repositories and operational codebases.
+
+## Development
+
+Install development dependencies:
+
+```bash
+poetry install
+```
+
+Run formatting:
+
+```bash
+make fmt
+```
+
+Run linting:
+
+```bash
+make lint
+```
+
+Run static typing:
+
+```bash
+make type
+```
+
+Run tests:
+
+```bash
+make test
+```
+
+Run full validation:
+
+```bash
+make check
+```
+
+Run MXM package compliance validation:
+
+```bash
+mxm-foundry check .
+```
+
+## Testing
+
+The test suite includes coverage for:
+
+- backend dispatch,
+- gopass integration behavior,
+- environment fallback logic,
+- CLI functionality,
+- typing and packaging integration.
+
+Tests are executed using:
+
+```bash
+pytest
+```
 
 ## License
 
-MIT © [Money Ex Machina](https://moneyexmachina.com)
-
----
+MIT License. See [LICENSE](LICENSE).
 
 ## Links
 
-* [gopass documentation](https://www.gopass.pw)
-* [GPG best practices](https://riseup.net/en/security/message-security/openpgp/best-practices)
+- [Money Ex Machina](https://moneyexmachina.com)
+- [gopass](https://www.gopass.pw)
+- [Keep a Changelog](https://keepachangelog.com)
+- [Semantic Versioning](https://semver.org)

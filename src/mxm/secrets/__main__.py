@@ -5,13 +5,15 @@ the MXM secrets layer. Supports retrieving secrets from gopass or environment
 backends with options for fallback and verbose output.
 
 Usage:
-    poetry run python -m mxm_secrets get <key> [--default <val>] [--verbose]
+    poetry run python -m mxm.secrets get <key> [--default <val>] [--verbose]
 """
 
 import sys
+
 import click
-from mxm_secrets import api
-import mxm_secrets.backends.gopass_backend as gopass_backend
+
+import mxm.secrets.backends.gopass_backend as gopass_backend
+from mxm.secrets import api
 
 
 @click.group()
@@ -50,4 +52,3 @@ def get(key: str, default: str | None, verbose: bool) -> None:
 
 if __name__ == "__main__":
     cli()
-

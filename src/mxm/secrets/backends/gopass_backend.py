@@ -1,10 +1,10 @@
-"""mxm_secrets.backends.gopass_backend
+"""mxm.secrets.backends.gopass_backend
 
 Backend implementation for accessing secrets via the `gopass` CLI.
 
 This module provides a single function, `access_secret(key, default)`, which attempts to
 resolve the given secret key using `gopass show`. It is designed to be consumed via
-the public API in `mxm_secrets.api`, not used directly.
+the public API in `mxm.secrets.api`, not used directly.
 
 Behavior:
 - Fails silently (returns default) if `gopass` returns a non-zero exit code
@@ -12,7 +12,7 @@ Behavior:
 - Assumes `gopass` is installed and a GPG key is unlocked or passphrase-less
 
 Example:
-    from mxm_secrets.backends.gopass_backend import access_secret
+    from mxm.secrets.backends.gopass_backend import access_secret
 
     secret = access_secret("prod/db-password")
 
@@ -23,8 +23,6 @@ This module avoids naming conflicts by using `access_secret` instead of `get_sec
 import shutil
 import subprocess
 import sys
-from typing import Optional
-
 
 VERBOSE = False
 
@@ -45,7 +43,7 @@ def is_gopass_available() -> bool:
         return False
 
 
-def access_secret(key: str, default: Optional[str] = None) -> Optional[str]:
+def access_secret(key: str, default: str | None = None) -> str | None:
     """
     Retrieve a secret using the gopass CLI.
 

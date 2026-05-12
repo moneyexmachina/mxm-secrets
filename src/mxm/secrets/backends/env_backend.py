@@ -1,4 +1,4 @@
-"""mxm_secrets.backends.env_backend
+"""mxm.secrets.backends.env_backend
 
 Backend for resolving secrets from environment variables.
 
@@ -16,14 +16,13 @@ Example:
 This module defines a single public function: `access_secret(key, default)`.
 
 Use via the public API:
-    from mxm_secrets import get_secret
+    from mxm.secrets import get_secret
 """
 
 import os
-from typing import Optional
 
 
-def access_secret(key: str, default: Optional[str] = None) -> Optional[str]:
+def access_secret(key: str, default: str | None = None) -> str | None:
     """
     Attempt to resolve a secret from environment variables.
 
