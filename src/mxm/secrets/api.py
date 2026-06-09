@@ -1,113 +1,105 @@
-"""mxm.secrets.api
+"""Public API boundary for mxm-secrets.
 
-This module provides the public API surface for secrets access within the
-Money Ex Machina infrastructure. All MXM packages should retrieve secrets
-exclusively through `get_secret(...)` defined here.
+This module defines SecretsApi, the public service boundary for configured
+secret access inside the Money Ex Machina ecosystem.
 
-Philosophy:
-- Explicit: Secrets must be requested individually
-- Scoped: Only secrets needed by the current process are retrieved
-- Modular: This interface abstracts over multiple backends (gopass, env, vault, etc.)
+SecretsApi owns the configured secret registries needed for resolution, but it
+does not own secret values. It resolves public secret names into configured
+secret references, resolves their stores, and retrieves the resulting backend
+location through the supported secret backend.
 
-This module defines the function `get_secret(key, default)` which:
-- Resolves a secret using a prioritized set of backends
-- Is the only access point that should be used by MXM packages
-- Supports backend extensibility and config-based dispatch (future)
+Current Session 47C interim behavior:
+- callers request secrets by public secret name;
+- SecretsApi resolves names through a SecretRefRegistry;
+- SecretsApi resolves stores through a SecretStoreRegistry;
+- SecretsApi retrieves the resolved backend location through gopass.
 
-Current behavior:
-- Attempts resolution using `gopass` first
-- Falls back to environment variables if no match is found
-- Returns `default` if all backends fail
-
-Future plans:
-- Make backend priority configurable via `mxm-config`
-- Add support for Vault, Age, and runtime session backends
-
-Example:
-    from mxm.secrets import get_secret
-
-    api_key = get_secret("prod/some-api-key")
-
-Do not use backend modules directly; rely on this interface for all access.
+Authorization, principal derivation, and RuntimeIdentity integration are still
+to be added in Session 47C. The current implementation deliberately keeps a
+TODO at the point where authorization must happen.
 """
 
-from collections.abc import Callable
+from __future__ import annotations
+
 from dataclasses import dataclass
 
-from mxm.secrets.backends import env_backend, gopass_backend
-
-AccessFn = Callable[[str, str | None], str | None]
-CheckFn = Callable[[], bool]
-
-
-@dataclass(frozen=True)
-class Backend:
-    access: AccessFn
-    check: CheckFn
+from mxm.secrets.backends import gopass_backend
+from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
+from mxm.secrets.resolution import resolve_secret_location, retrieve_resolved_secret
 
 
-_BACKEND_PRIORITY = ["gopass", "env"]
+@dataclass(frozen=True, slots=True)
+class SecretsApi:
+    """Configured public API for secret retrieval.
 
+    SecretsApi is the object application code should use to request secrets. It
+    is constructed from registries supplied by the caller, usually by
+    mxm-runtime after loading configuration through mxm-config.
 
-_BACKEND_DISPATCH: dict[str, Backend] = {
-    "gopass": Backend(
-        access=gopass_backend.access_secret,
-        check=gopass_backend.is_gopass_available,
-    ),
-    "env": Backend(
-        access=env_backend.access_secret,
-        check=lambda: True,
-    ),
-}
+    The API is intentionally explicit: it does not discover configuration, load
+    mxm-config, or infer runtime identity. Those responsibilities belong to the
+    runtime materialisation layer.
 
-
-def get_secret(key: str, default: str | None = None) -> str | None:
-    """
-    Retrieve a secret from the configured backend chain.
-
-    Attempts each backend in order. Skips unavailable backends silently.
-
-    Args:
-        key: The secret identifier (e.g., "prod/smtp-password").
-        default: Value to return if no backend resolves the secret.
-
-    Returns:
-        The resolved secret value, or `default` if not found.
-
-    Raises:
-        ValueError: If an unknown backend is listed in _BACKEND_PRIORITY.
+    Attributes:
+        secret_ref_registry: Registry mapping public secret names to configured
+            secret references.
+        secret_store_registry: Registry mapping logical store names to
+            configured secret stores.
     """
 
-    for backend_name in _BACKEND_PRIORITY:
-        if backend_name not in _BACKEND_DISPATCH:
-            raise ValueError(f"Unknown backend: {backend_name}")
+    secret_ref_registry: SecretRefRegistry
+    secret_store_registry: SecretStoreRegistry
 
-        backend = _BACKEND_DISPATCH[backend_name]
+    def get_secret(
+        self,
+        secret_name: str,
+        *,
+        default: str | None = None,
+    ) -> str | None:
+        """Retrieve a secret by public secret name.
 
-        if not backend.check():
-            continue
+        This interim implementation performs configured name resolution, store
+        resolution, backend path resolution, and gopass retrieval.
 
-        result = backend.access(key, None)
-        if result is not None:
-            return result
+        Args:
+            secret_name: Public secret name requested by application code.
+            default: Value to return if the resolved backend cannot retrieve the
+                secret.
 
-    return default
+        Returns:
+            The resolved secret value, or default if the backend is unavailable
+            or cannot resolve the configured backend path.
 
+        Raises:
+            KeyError: If secret_name is not registered or references an
+                unregistered store.
+            ValueError: If the resolved location references an unsupported
+                backend.
 
-def check_backend_ready() -> bool:
-    """
-    Return True if at least one usable backend is available.
+        Todo:
+            Add RuntimeIdentity input, principal derivation, and policy
+            evaluation before resolving the backend location or retrieving the
+            secret value.
+        """
+        # TODO: Add RuntimeIdentity input, derive the principal, and evaluate
+        # the configured policy for this secret before resolving the backend
+        # location.
+        location = resolve_secret_location(
+            secret_name=secret_name,
+            secret_ref_registry=self.secret_ref_registry,
+            secret_store_registry=self.secret_store_registry,
+        )
 
-    Useful for CLI diagnostics or startup assertions.
-    """
+        return retrieve_resolved_secret(
+            location=location,
+            default=default,
+        )
 
-    for backend_name in _BACKEND_PRIORITY:
-        if backend_name not in _BACKEND_DISPATCH:
-            continue
+    def check_ready(self) -> bool:
+        """Return whether the currently supported backend is available.
 
-        backend = _BACKEND_DISPATCH[backend_name]
-
-        if backend.check():
-            return True
-
-    return False
+        Returns:
+            True if gopass is installed and its store is accessible, otherwise
+            False.
+        """
+        return gopass_backend.is_gopass_available()

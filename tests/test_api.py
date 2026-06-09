@@ -1,41 +1,171 @@
-"""Tests for the mxm.secrets public API layer."""
+"""Tests for the public mxm-secrets API."""
 
 import pytest
 
-from mxm.secrets import api
+from mxm.secrets.api import SecretsApi
+from mxm.secrets.models import SecretRef, SecretStore
+from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
 
 
-def test_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that environment backend returns a matching value."""
-    monkeypatch.setenv("PROD_EMAIL_PASSWORD", "supersecret")
-    assert api.get_secret("prod/email-password") == "supersecret"
-
-
-def test_return_default_on_missing() -> None:
-    """Test that default is returned when no backend finds a secret."""
-    assert api.get_secret("nonexistent/secret", default="fallback") == "fallback"
-
-
-def test_gopass_skipped_if_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that get_secret skips gopass if it is not available."""
-    monkeypatch.setattr(
-        "mxm.secrets.backends.gopass_backend.is_gopass_available", lambda: False
+def make_secret_ref(
+    *,
+    name: str = "test_api_key",
+    store: str = "red",
+    path: str = "opaque/test-api-key",
+    policy: str = "test_policy",
+) -> SecretRef:
+    """Create a valid SecretRef for API tests."""
+    return SecretRef(
+        name=name,
+        store=store,
+        path=path,
+        policy=policy,
     )
-    monkeypatch.setenv("PROD_SKIP_TEST", "yes")
-    assert api.get_secret("prod/skip-test") == "yes"
 
 
-def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that an unknown backend in priority list raises ValueError."""
-    monkeypatch.setattr("mxm.secrets.api._BACKEND_PRIORITY", ["unknown"])
-    with pytest.raises(ValueError, match="Unknown backend: unknown"):
-        api.get_secret("prod/should-fail")
-
-
-def test_check_backend_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test the backend availability checker."""
-    monkeypatch.setattr(
-        "mxm.secrets.backends.gopass_backend.is_gopass_available", lambda: False
+def make_secret_store(
+    *,
+    name: str = "red",
+    backend: str = "gopass",
+    root: str = "mxm/red",
+) -> SecretStore:
+    """Create a valid SecretStore for API tests."""
+    return SecretStore(
+        name=name,
+        backend=backend,
+        root=root,
     )
-    monkeypatch.setenv("PROD_READY_CHECK", "ok")
-    assert api.check_backend_ready() is True
+
+
+def make_secrets_api(
+    *,
+    secret_ref: SecretRef | None = None,
+    secret_store: SecretStore | None = None,
+) -> SecretsApi:
+    """Create a SecretsApi with in-memory test registries."""
+    return SecretsApi(
+        secret_ref_registry=SecretRefRegistry(
+            [secret_ref if secret_ref is not None else make_secret_ref()]
+        ),
+        secret_store_registry=SecretStoreRegistry(
+            [secret_store if secret_store is not None else make_secret_store()]
+        ),
+    )
+
+
+def test_get_secret_retrieves_configured_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that SecretsApi resolves registries and retrieves via gopass."""
+    api = make_secrets_api()
+    observed_key = ""
+    observed_default: str | None = None
+
+    def mock_is_gopass_available() -> bool:
+        return True
+
+    def mock_access_secret(key: str, default: str | None = None) -> str:
+        nonlocal observed_key
+        nonlocal observed_default
+
+        observed_key = key
+        observed_default = default
+        return "secret-value"
+
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.is_gopass_available",
+        mock_is_gopass_available,
+    )
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.access_secret",
+        mock_access_secret,
+    )
+
+    result = api.get_secret("test_api_key", default="fallback")
+
+    assert result == "secret-value"
+    assert observed_key == "mxm/red/opaque/test-api-key"
+    assert observed_default == "fallback"
+
+
+def test_get_secret_returns_default_when_gopass_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that SecretsApi returns default when gopass is unavailable."""
+    api = make_secrets_api()
+    access_called = False
+
+    def mock_is_gopass_available() -> bool:
+        return False
+
+    def mock_access_secret(key: str, default: str | None = None) -> str | None:
+        nonlocal access_called
+        _ = key
+        _ = default
+
+        access_called = True
+        return "should-not-be-used"
+
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.is_gopass_available",
+        mock_is_gopass_available,
+    )
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.access_secret",
+        mock_access_secret,
+    )
+
+    result = api.get_secret("test_api_key", default="fallback")
+
+    assert result == "fallback"
+    assert access_called is False
+
+
+def test_get_secret_raises_for_unknown_secret_name() -> None:
+    """Test that unknown secret names fail at the API boundary."""
+    api = make_secrets_api()
+
+    with pytest.raises(KeyError, match="Unknown secret name: missing_secret"):
+        api.get_secret("missing_secret")
+
+
+def test_get_secret_raises_for_unknown_store_name() -> None:
+    """Test that SecretRefs referencing unknown stores fail at the API boundary."""
+    api = make_secrets_api(secret_ref=make_secret_ref(store="missing_store"))
+
+    with pytest.raises(KeyError, match="Unknown secret store: missing_store"):
+        api.get_secret("test_api_key")
+
+
+def test_get_secret_raises_for_unsupported_backend() -> None:
+    """Test that non-gopass backends are rejected in the interim API."""
+    api = make_secrets_api(secret_store=make_secret_store(backend="vault"))
+
+    with pytest.raises(ValueError, match="Unsupported secret backend: vault"):
+        api.get_secret("test_api_key")
+
+
+def test_get_secret_currently_does_not_enforce_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Document that policy authorization is not yet enforced."""
+    api = make_secrets_api(secret_ref=make_secret_ref(policy="deny_all"))
+
+    def mock_is_gopass_available() -> bool:
+        return True
+
+    def mock_access_secret(key: str, default: str | None = None) -> str:
+        _ = key
+        _ = default
+        return "secret-value"
+
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.is_gopass_available",
+        mock_is_gopass_available,
+    )
+    monkeypatch.setattr(
+        "mxm.secrets.backends.gopass_backend.access_secret",
+        mock_access_secret,
+    )
+
+    assert api.get_secret("test_api_key") == "secret-value"

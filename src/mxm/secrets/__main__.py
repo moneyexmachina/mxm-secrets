@@ -1,19 +1,26 @@
-"""mxm-secrets CLI entrypoint.
+"""mxm-secrets CLI entry point.
 
-Provides a minimal, extensible command-line interface for interacting with
-the MXM secrets layer. Supports retrieving secrets from gopass or environment
-backends with options for fallback and verbose output.
+This module currently provides only lightweight diagnostics for the mxm-secrets
+package.
 
-Usage:
-    poetry run python -m mxm.secrets get <key> [--default <val>] [--verbose]
+The previous `get` command has been removed during the Session 47C refactor
+because secret retrieval now requires configured registries and, soon,
+RuntimeIdentity-based authorization. Production CLI secret retrieval should be
+reintroduced after RuntimeContext construction exists in mxm-runtime.
+
+TODO:
+    Reintroduce a secret retrieval CLI once mxm-runtime can construct a fully
+    configured SecretsApi from RuntimeContext.
 """
+
+from __future__ import annotations
 
 import sys
 
 import click
 
-import mxm.secrets.backends.gopass_backend as gopass_backend
-from mxm.secrets import api
+from mxm.secrets.api import SecretsApi
+from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
 
 
 @click.group()
@@ -23,31 +30,19 @@ def cli() -> None:
 
 
 @cli.command()
-@click.argument("key")
-@click.option(
-    "--default",
-    default=None,
-    help="Default value to return if the secret is not found.",
-)
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose error output from backend (e.g. gopass).",
-)
-def get(key: str, default: str | None, verbose: bool) -> None:
-    """Retrieve a secret using the given KEY."""
-    if verbose:
-        gopass_backend.VERBOSE = True
+def check() -> None:
+    """Check whether the currently supported secret backend is available."""
+    api = SecretsApi(
+        secret_ref_registry=SecretRefRegistry([]),
+        secret_store_registry=SecretStoreRegistry([]),
+    )
 
-    try:
-        secret = api.get_secret(key, default=default)
-        if secret is None:
-            click.secho("[NOT FOUND]", err=True, fg="red")
-            sys.exit(1)
-        click.echo(secret)
-    except Exception as exc:
-        click.secho(f"Error: {exc}", err=True, fg="red")
-        sys.exit(1)
+    if api.check_ready():
+        click.secho("[OK] gopass backend available", fg="green")
+        return
+
+    click.secho("[ERROR] gopass backend unavailable", err=True, fg="red")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
