@@ -13,6 +13,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mxm.secrets.validators import (
+    validate_identifier,
+    validate_non_empty_clean,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SecretRef:
@@ -40,13 +45,12 @@ class SecretRef:
         """Validate the configured secret reference.
 
         Raises:
-            ValueError: If any field is empty, whitespace-only, or contains
-                leading or trailing whitespace.
+            ValueError: If any field is invalid.
         """
-        _validate_non_empty_clean("name", self.name)
-        _validate_non_empty_clean("store", self.store)
-        _validate_non_empty_clean("path", self.path)
-        _validate_non_empty_clean("policy", self.policy)
+        validate_identifier("name", self.name)
+        validate_identifier("store", self.store)
+        validate_non_empty_clean("path", self.path)
+        validate_identifier("policy", self.policy)
 
     @property
     def qualified_name(self) -> str:
@@ -56,24 +60,3 @@ class SecretRef:
             A string combining store and name without exposing the storage path.
         """
         return f"{self.store}:{self.name}"
-
-
-def _validate_non_empty_clean(field_name: str, value: str) -> None:
-    """Validate that a string field is non-empty and whitespace-clean.
-
-    Args:
-        field_name: Name of the field being validated.
-        value: Field value to validate.
-
-    Raises:
-        ValueError: If value is empty, whitespace-only, or has leading or
-            trailing whitespace.
-    """
-    if not value:
-        raise ValueError(f"{field_name} must not be empty")
-
-    if value.strip() != value:
-        raise ValueError(f"{field_name} must not contain surrounding whitespace")
-
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be whitespace-only")

@@ -73,7 +73,7 @@ def test_retrieve_resolved_secret_calls_gopass_backend(
 
         observed_path = key
         observed_default = default
-        return "secret-value"
+        return "secret_value"
 
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.is_gopass_available",
@@ -86,7 +86,7 @@ def test_retrieve_resolved_secret_calls_gopass_backend(
 
     result = retrieve_resolved_secret(location, default="fallback")
 
-    assert result == "secret-value"
+    assert result == "secret_value"
     assert observed_path == "mxm/red/opaque/path"
     assert observed_default == "fallback"
 
@@ -106,7 +106,7 @@ def test_retrieve_resolved_secret_returns_default_when_gopass_unavailable(
         _ = key
         _ = default
         access_called = True
-        return "should-not-be-used"
+        return "should_not_be_used"
 
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.is_gopass_available",

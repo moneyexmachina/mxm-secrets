@@ -37,6 +37,42 @@ def test_secret_store_can_be_created() -> None:
     assert store.root == "mxm/red"
 
 
+def test_secret_store_rejects_invalid_name_identifier() -> None:
+    """Test that store name must be a valid identifier."""
+    with pytest.raises(ValueError, match="name must match pattern"):
+        make_secret_store(name="red-store")
+
+
+def test_secret_store_rejects_invalid_backend_identifier() -> None:
+    """Test that backend name must be a valid identifier."""
+    with pytest.raises(ValueError, match="backend must match pattern"):
+        make_secret_store(backend="GoPass")
+
+
+def test_secret_store_rejects_empty_root() -> None:
+    """Test that empty root is rejected."""
+    with pytest.raises(ValueError, match="root must not be empty"):
+        make_secret_store(root="")
+
+
+def test_secret_store_rejects_root_with_surrounding_whitespace() -> None:
+    """Test that root with surrounding whitespace is rejected."""
+    with pytest.raises(
+        ValueError,
+        match="root must not contain surrounding whitespace",
+    ):
+        make_secret_store(root=" mxm/red ")
+
+
+def test_secret_store_rejects_whitespace_only_root() -> None:
+    """Test that whitespace-only root is rejected."""
+    with pytest.raises(
+        ValueError,
+        match="root must not contain surrounding whitespace",
+    ):
+        make_secret_store(root="   ")
+
+
 def test_resolve_path_joins_root_and_relative_path() -> None:
     """Test that resolve_path joins the store root and secret path."""
     store = make_secret_store(root="mxm/red")
@@ -49,66 +85,6 @@ def test_resolve_path_handles_trailing_root_slash() -> None:
     store = make_secret_store(root="mxm/red/")
 
     assert store.resolve_path("opaque/path") == "mxm/red/opaque/path"
-
-
-@pytest.mark.parametrize("field_name", ["name", "backend", "root"])
-def test_secret_store_rejects_empty_fields(field_name: str) -> None:
-    """Test that empty constructor fields are rejected."""
-    values = {
-        "name": "red",
-        "backend": "gopass",
-        "root": "mxm/red",
-    }
-    values[field_name] = ""
-
-    with pytest.raises(ValueError, match=f"{field_name} must not be empty"):
-        SecretStore(
-            name=values["name"],
-            backend=values["backend"],
-            root=values["root"],
-        )
-
-
-@pytest.mark.parametrize("field_name", ["name", "backend", "root"])
-def test_secret_store_rejects_surrounding_whitespace(field_name: str) -> None:
-    """Test that constructor fields with surrounding whitespace are rejected."""
-    values = {
-        "name": "red",
-        "backend": "gopass",
-        "root": "mxm/red",
-    }
-    values[field_name] = f" {values[field_name]} "
-
-    with pytest.raises(
-        ValueError,
-        match=f"{field_name} must not contain surrounding whitespace",
-    ):
-        SecretStore(
-            name=values["name"],
-            backend=values["backend"],
-            root=values["root"],
-        )
-
-
-@pytest.mark.parametrize("field_name", ["name", "backend", "root"])
-def test_secret_store_rejects_whitespace_only_fields(field_name: str) -> None:
-    """Test that whitespace-only constructor fields are rejected."""
-    values = {
-        "name": "red",
-        "backend": "gopass",
-        "root": "mxm/red",
-    }
-    values[field_name] = "   "
-
-    with pytest.raises(
-        ValueError,
-        match=f"{field_name} must not contain surrounding whitespace",
-    ):
-        SecretStore(
-            name=values["name"],
-            backend=values["backend"],
-            root=values["root"],
-        )
 
 
 def test_resolve_path_rejects_empty_secret_path() -> None:

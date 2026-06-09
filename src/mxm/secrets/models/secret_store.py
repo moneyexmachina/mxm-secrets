@@ -11,6 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mxm.secrets.validators import (
+    validate_identifier,
+    validate_non_empty_clean,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SecretStore:
@@ -36,12 +41,11 @@ class SecretStore:
         """Validate the configured secret store.
 
         Raises:
-            ValueError: If any field is empty, whitespace-only, or contains
-                leading or trailing whitespace.
+            ValueError: If any field is invalid.
         """
-        _validate_non_empty_clean("name", self.name)
-        _validate_non_empty_clean("backend", self.backend)
-        _validate_non_empty_clean("root", self.root)
+        validate_identifier("name", self.name)
+        validate_identifier("backend", self.backend)
+        validate_non_empty_clean("root", self.root)
 
     def resolve_path(self, secret_path: str) -> str:
         """Resolve a store-relative secret path into a backend path.
@@ -57,30 +61,9 @@ class SecretStore:
             ValueError: If secret_path is empty, whitespace-only, contains
                 leading or trailing whitespace, or is absolute.
         """
-        _validate_non_empty_clean("secret_path", secret_path)
+        validate_non_empty_clean("secret_path", secret_path)
 
         if secret_path.startswith("/"):
             raise ValueError("secret_path must be relative")
 
         return f"{self.root.rstrip('/')}/{secret_path.lstrip('/')}"
-
-
-def _validate_non_empty_clean(field_name: str, value: str) -> None:
-    """Validate that a string field is non-empty and whitespace-clean.
-
-    Args:
-        field_name: Name of the field being validated.
-        value: Field value to validate.
-
-    Raises:
-        ValueError: If value is empty, whitespace-only, or has leading or
-            trailing whitespace.
-    """
-    if not value:
-        raise ValueError(f"{field_name} must not be empty")
-
-    if value.strip() != value:
-        raise ValueError(f"{field_name} must not contain surrounding whitespace")
-
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be whitespace-only")

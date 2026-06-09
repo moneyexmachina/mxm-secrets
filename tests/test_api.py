@@ -11,7 +11,7 @@ def make_secret_ref(
     *,
     name: str = "test_api_key",
     store: str = "red",
-    path: str = "opaque/test-api-key",
+    path: str = "opaque/test_api_key",
     policy: str = "test_policy",
 ) -> SecretRef:
     """Create a valid SecretRef for API tests."""
@@ -70,7 +70,7 @@ def test_get_secret_retrieves_configured_secret(
 
         observed_key = key
         observed_default = default
-        return "secret-value"
+        return "secret_value"
 
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.is_gopass_available",
@@ -83,8 +83,8 @@ def test_get_secret_retrieves_configured_secret(
 
     result = api.get_secret("test_api_key", default="fallback")
 
-    assert result == "secret-value"
-    assert observed_key == "mxm/red/opaque/test-api-key"
+    assert result == "secret_value"
+    assert observed_key == "mxm/red/opaque/test_api_key"
     assert observed_default == "fallback"
 
 
@@ -104,7 +104,7 @@ def test_get_secret_returns_default_when_gopass_unavailable(
         _ = default
 
         access_called = True
-        return "should-not-be-used"
+        return "should_not_be_used"
 
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.is_gopass_available",
@@ -157,7 +157,7 @@ def test_get_secret_currently_does_not_enforce_policy(
     def mock_access_secret(key: str, default: str | None = None) -> str:
         _ = key
         _ = default
-        return "secret-value"
+        return "secret_value"
 
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.is_gopass_available",
@@ -168,4 +168,4 @@ def test_get_secret_currently_does_not_enforce_policy(
         mock_access_secret,
     )
 
-    assert api.get_secret("test_api_key") == "secret-value"
+    assert api.get_secret("test_api_key") == "secret_value"
