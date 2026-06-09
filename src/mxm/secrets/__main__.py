@@ -20,7 +20,11 @@ import sys
 import click
 
 from mxm.secrets.api import SecretsApi
-from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
+from mxm.secrets.registries import (
+    SecretPolicyRegistry,
+    SecretRefRegistry,
+    SecretStoreRegistry,
+)
 
 
 @click.group()
@@ -35,6 +39,7 @@ def check() -> None:
     api = SecretsApi(
         secret_ref_registry=SecretRefRegistry([]),
         secret_store_registry=SecretStoreRegistry([]),
+        secret_policy_registry=SecretPolicyRegistry([]),
     )
 
     if api.check_ready():

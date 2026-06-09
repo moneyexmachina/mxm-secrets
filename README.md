@@ -1,18 +1,19 @@
 # mxm-secrets
+
 ![Version](https://img.shields.io/github/v/release/moneyexmachina/mxm-secrets)
 ![License](https://img.shields.io/github/license/moneyexmachina/mxm-secrets)
 ![Python](https://img.shields.io/badge/python-3.13+-blue)
 [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
-A typed, minimal, pluggable Python interface for operational secret access within the Money Ex Machina ecosystem.
+Typed, authorization-aware secret resolution for the Money Ex Machina ecosystem.
 
-Built around explicit, scoped secret retrieval using [`gopass`](https://www.gopass.pw), with support for additional backends and deployment environments over time.
+`mxm-secrets` resolves public secret names into backend secret values using configured secret references, stores, policies, and runtime identity.
+
+The package provides the Resolution layer of the MXM Runtime Context Architecture.
 
 ## Purpose
 
-`mxm-secrets` provides the canonical secret access layer for MXM packages.
-
-The package exists to separate:
+`mxm-secrets` exists to separate:
 
 ```text
 application code
@@ -21,55 +22,175 @@ application code
 from:
 
 ```text
-secret storage and operational credential management
+secret storage
+authorization
+runtime identity
+secret resolution
 ```
 
-MXM packages should never:
+Applications should never:
 
-- hardcode secrets,
-- preload global credential blobs,
-- depend directly on backend implementations,
-- or assume a particular secret storage mechanism.
+- hardcode secret values,
+- depend on gopass paths,
+- implement authorization logic,
+- or perform secret discovery themselves.
 
-Instead, packages retrieve secrets explicitly:
+Instead, applications request secrets through a configured API:
 
 ```python
-from mxm.secrets import get_secret
-
-api_key = get_secret("prod/some-api-key")
+secret = api.get_secret(
+    secret_name="databento_api_key",
+    identity=runtime_identity,
+)
 ```
 
-This establishes:
+The package then:
 
-- explicit dependency boundaries,
-- process-local secret access,
-- backend composability,
-- operational portability,
-- and testable infrastructure interfaces.
+```text
+resolves the secret reference
+derives the principal
+evaluates authorization
+resolves the backend location
+retrieves the secret value
+```
 
-## Philosophy
+## Architecture
 
-### Explicit
+`mxm-secrets` implements the Resolution layer:
 
-Secrets must be requested individually by name.
+```text
+RuntimeIdentity
+    ↓
+Principal
+    ↓
+SecretPolicy
+    ↓
+Authorization
+    ↓
+SecretRef
+    ↓
+SecretStore
+    ↓
+ResolvedSecretLocation
+    ↓
+Backend Retrieval
+```
 
-No global credential injection or hidden runtime state.
+The package does not discover configuration.
 
-### Scoped
+Configuration loading belongs to:
 
-Each process retrieves only the secrets it requires.
+```text
+mxm-runtime
+```
 
-### Composable
+which constructs configured API instances from configuration data.
 
-Designed for Unix-style workflows, automation pipelines, REPLs, and distributed runtime environments.
+## Core Concepts
 
-### Pluggable
+### RuntimeIdentity
 
-Supports multiple backend implementations behind a stable API surface.
+Represents the operational runtime requesting access.
 
-### Minimal
+Example:
 
-Small dependency surface, strict typing, and reproducible operational behavior.
+```text
+machine      bridge
+environment  dev
+role         marketdata
+```
+
+Runtime identity is always supplied explicitly.
+
+### Principal
+
+Represents the operational authority requesting a secret.
+
+Examples:
+
+```text
+marketdata
+execution
+research
+human_admin
+```
+
+Principals are derived from runtime identity.
+
+### SecretRef
+
+Represents a logical secret reference.
+
+Example:
+
+```python
+SecretRef(
+    name="databento_api_key",
+    store="red",
+    path="marketdata/databento/api_key",
+    policy="marketdata_access",
+)
+```
+
+Applications depend on secret names rather than storage locations.
+
+### SecretStore
+
+Represents a configured secret authority.
+
+Example:
+
+```python
+SecretStore(
+    name="red",
+    backend="gopass",
+    root="mxm/red",
+)
+```
+
+### SecretPolicy
+
+Represents authorization rules.
+
+Example:
+
+```python
+SecretPolicy(
+    name="marketdata_access",
+    allowed_principals=(
+        "marketdata",
+        "research",
+    ),
+)
+```
+
+## Resolution Flow
+
+A secret request follows the path:
+
+```text
+secret_name
+    ↓
+SecretRefRegistry
+    ↓
+RuntimeIdentity
+    ↓
+Principal
+    ↓
+SecretPolicyRegistry
+    ↓
+Policy Evaluation
+    ↓
+SecretStoreRegistry
+    ↓
+ResolvedSecretLocation
+    ↓
+Secret Retrieval
+    ↓
+secret value
+```
+
+Unauthorized requests fail before backend retrieval occurs.
 
 ## Installation
 
@@ -89,134 +210,105 @@ poetry install
 
 ## Usage
 
-### Python API
+### Constructing a SecretsApi
 
-```python
-from mxm.secrets import get_secret
+The package is intentionally explicit.
 
-api_key = get_secret("mxm/dev/api-key")
-smtp_password = get_secret("prod/smtp-password", default="changeme")
-```
-
-### CLI Usage
-
-Retrieve a secret:
-
-```bash
-python -m mxm.secrets get mxm/dev/api-key
-```
-
-With fallback value:
-
-```bash
-python -m mxm.secrets get mxm/dev/api-key --default "changeme"
-```
-
-Verbose mode:
-
-```bash
-python -m mxm.secrets get mxm/dev/api-key --verbose
-```
-
-## Secret Resolution Logic
-
-When:
-
-```python
-get_secret("mxm/dev/api-key")
-```
-
-is called, the package attempts resolution using configured backends in priority order.
-
-Current default order:
-
-1. `gopass`
-2. environment variables
+Callers construct registries and provide them to `SecretsApi`.
 
 Example:
 
+```python
+api = SecretsApi(
+    secret_ref_registry=...,
+    secret_store_registry=...,
+    secret_policy_registry=...,
+)
+```
+
+### Retrieving a Secret
+
+```python
+secret = api.get_secret(
+    secret_name="databento_api_key",
+    identity=runtime_identity,
+)
+```
+
+Authorization is evaluated automatically before secret retrieval.
+
+## Backend Support
+
+Current backend support:
+
+| Backend | Status |
+|----------|----------|
+| gopass | Stable |
+
+The backend abstraction remains intentionally small.
+
+Future backends may be added if required by MXM deployment architecture.
+
+## Security Model
+
+`mxm-secrets` separates:
+
 ```text
-mxm/dev/api-key
+storage
 ```
 
-maps to:
-
-```bash
-gopass show mxm/dev/api-key
-```
-
-and environment fallback:
+from:
 
 ```text
-MXM_DEV_API_KEY
+authorization
 ```
 
-If no backend resolves the secret:
+The existence of a secret in a backend does not imply authorization.
 
-- the provided `default` value is returned,
-- otherwise `None`.
-
-## Secret Store Layout
-
-Typical `gopass` structure:
+Authorization is evaluated through:
 
 ```text
-mxm/
-├── prod/
-│   └── email-password
-├── dev/
-│   └── test-api-key
-├── runtime/
-└── bootstrap/
+Principal
+SecretPolicy
+SecretPolicyRegistry
 ```
 
-Each subtree may use separate `.gpg-id` files for scoped access control.
+before retrieval occurs.
 
-Example:
+The package:
 
-```bash
-gopass insert mxm/dev/test-api-key
-```
+- does not cache secrets,
+- does not preload secret collections,
+- does not expose backend paths to applications,
+- does not infer runtime identity,
+- does not perform configuration discovery.
 
----
+## Relationship To mxm-runtime
 
-## Available Backends
+`mxm-secrets` provides semantics.
 
-| Backend       | Status      | Description                              |
-|----------------|-------------|------------------------------------------|
-| `gopass`       | Stable      | Local encrypted secret storage via GPG  |
-| Environment    | Stable      | Environment variable fallback backend    |
-| `age`          | Planned     | File-based encrypted secret backend      |
-| Vault          | Planned     | Centralized secret infrastructure        |
+`mxm-runtime` provides materialisation.
 
-## Configuration
-
-Current backend priority is statically defined inside the package.
-
-Future versions will support configuration through:
+Responsibilities are separated:
 
 ```text
 mxm-config
+    owns configuration data
+
+mxm-secrets
+    owns resolution and authorization semantics
+
+mxm-runtime
+    owns assembly and RuntimeContext construction
 ```
 
-Planned future capabilities:
+Applications are expected to consume configured APIs through:
 
-- configurable backend ordering,
-- runtime session backends,
-- Vault integration,
-- Age integration,
-- deployment-specific backend chains.
+```python
+RuntimeContext
+```
 
-## Security Notes
-
-`mxm-secrets`:
-
-- does not cache secrets,
-- does not preload credentials,
-- does not globally export secrets,
-- does not persist runtime secret state.
-
-Secrets remain external to MXM repositories and operational codebases.
+rather than constructing production APIs directly.
 
 ## Development
 
@@ -266,11 +358,17 @@ mxm-foundry check .
 
 The test suite includes coverage for:
 
-- backend dispatch,
-- gopass integration behavior,
-- environment fallback logic,
-- CLI functionality,
-- typing and packaging integration.
+- secret references,
+- secret stores,
+- secret policies,
+- principals,
+- registries,
+- policy evaluation,
+- runtime identity mapping,
+- secret resolution,
+- backend retrieval,
+- API orchestration,
+- CLI diagnostics.
 
 Tests are executed using:
 
@@ -278,13 +376,24 @@ Tests are executed using:
 pytest
 ```
 
+## Status
+
+Current release status:
+
+```text
+Resolution Layer Complete
+Materialisation Layer Pending
+```
+
+Construction of configured registries from configuration data will be added as part of RuntimeContext materialisation work.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
 
 ## Links
 
-- [Money Ex Machina](https://moneyexmachina.com)
-- [gopass](https://www.gopass.pw)
-- [Keep a Changelog](https://keepachangelog.com)
-- [Semantic Versioning](https://semver.org)
+- https://moneyexmachina.com
+- https://www.gopass.pw
+- https://keepachangelog.com
+- https://semver.org

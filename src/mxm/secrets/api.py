@@ -3,37 +3,39 @@
 This module defines SecretsApi, the public service boundary for configured
 secret access inside the Money Ex Machina ecosystem.
 
-SecretsApi owns the configured secret registries needed for resolution, but it
-does not own secret values. It resolves public secret names into configured
-secret references, resolves their stores, and retrieves the resulting backend
-location through the supported secret backend.
-
-Current Session 47C interim behavior:
-- callers request secrets by public secret name;
-- SecretsApi resolves names through a SecretRefRegistry;
-- SecretsApi resolves stores through a SecretStoreRegistry;
-- SecretsApi retrieves the resolved backend location through gopass.
-
-Authorization, principal derivation, and RuntimeIdentity integration are still
-to be added in Session 47C. The current implementation deliberately keeps a
-TODO at the point where authorization must happen.
+SecretsApi owns the configured registries needed for authorization-aware secret
+resolution, but it does not own secret values. It resolves public secret names,
+derives principals from supplied RuntimeIdentity objects, evaluates configured
+policies, resolves authorized backend locations, and retrieves secret values
+through the supported backend.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mxm.secrets.authorization import (
+    is_secret_access_allowed,
+)
 from mxm.secrets.backends import gopass_backend
-from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
-from mxm.secrets.resolution import resolve_secret_location, retrieve_resolved_secret
+from mxm.secrets.registries import (
+    SecretPolicyRegistry,
+    SecretRefRegistry,
+    SecretStoreRegistry,
+)
+from mxm.secrets.resolution import (
+    principal_from_runtime_identity,
+    resolve_secret_location,
+    retrieve_resolved_secret,
+)
+from mxm.types.runtime_identity import RuntimeIdentity
 
 
 @dataclass(frozen=True, slots=True)
 class SecretsApi:
-    """Configured public API for secret retrieval.
+    """Configured public API for authorization-aware secret retrieval.
 
-    SecretsApi is the object application code should use to request secrets. It
-    is constructed from registries supplied by the caller, usually by
+    SecretsApi is constructed from registries supplied by the caller, usually by
     mxm-runtime after loading configuration through mxm-config.
 
     The API is intentionally explicit: it does not discover configuration, load
@@ -45,24 +47,44 @@ class SecretsApi:
             secret references.
         secret_store_registry: Registry mapping logical store names to
             configured secret stores.
+        secret_policy_registry: Registry mapping policy names to configured
+            secret policies.
     """
 
     secret_ref_registry: SecretRefRegistry
     secret_store_registry: SecretStoreRegistry
+    secret_policy_registry: SecretPolicyRegistry
 
     def get_secret(
         self,
         secret_name: str,
         *,
+        identity: RuntimeIdentity,
         default: str | None = None,
     ) -> str | None:
         """Retrieve a secret by public secret name.
 
-        This interim implementation performs configured name resolution, store
-        resolution, backend path resolution, and gopass retrieval.
+        The retrieval flow is:
+
+        ```text
+        secret_name
+            ↓
+        SecretRefRegistry
+            ↓
+        RuntimeIdentity → Principal
+            ↓
+        policy evaluation
+            ↓
+        SecretStoreRegistry
+            ↓
+        backend location
+            ↓
+        gopass retrieval
+        ```
 
         Args:
             secret_name: Public secret name requested by application code.
+            identity: Runtime identity supplied by the caller.
             default: Value to return if the resolved backend cannot retrieve the
                 secret.
 
@@ -71,19 +93,26 @@ class SecretsApi:
             or cannot resolve the configured backend path.
 
         Raises:
-            KeyError: If secret_name is not registered or references an
-                unregistered store.
+            KeyError: If secret_name, the referenced store, or the referenced
+                policy is not registered.
+            PermissionError: If the derived principal is not authorized to
+                access the requested secret.
             ValueError: If the resolved location references an unsupported
-                backend.
-
-        Todo:
-            Add RuntimeIdentity input, principal derivation, and policy
-            evaluation before resolving the backend location or retrieving the
-            secret value.
+                backend or if identity.role cannot form a valid Principal.
         """
-        # TODO: Add RuntimeIdentity input, derive the principal, and evaluate
-        # the configured policy for this secret before resolving the backend
-        # location.
+        secret_ref = self.secret_ref_registry.get(secret_name)
+        principal = principal_from_runtime_identity(identity)
+
+        if not is_secret_access_allowed(
+            secret_ref=secret_ref,
+            principal=principal,
+            policy_registry=self.secret_policy_registry,
+        ):
+            raise PermissionError(
+                "Secret access denied: "
+                f"{secret_ref.qualified_name} for principal {principal.name}"
+            )
+
         location = resolve_secret_location(
             secret_name=secret_name,
             secret_ref_registry=self.secret_ref_registry,

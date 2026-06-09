@@ -3,8 +3,38 @@
 import pytest
 
 from mxm.secrets.api import SecretsApi
-from mxm.secrets.models import SecretRef, SecretStore
-from mxm.secrets.registries import SecretRefRegistry, SecretStoreRegistry
+from mxm.secrets.models import SecretPolicy, SecretRef, SecretStore
+from mxm.secrets.registries import (
+    SecretPolicyRegistry,
+    SecretRefRegistry,
+    SecretStoreRegistry,
+)
+from mxm.types.runtime_identity import (
+    AppId,
+    Environment,
+    MachineId,
+    RuntimeIdentity,
+    RuntimeRole,
+    RuntimeSubstrate,
+)
+
+
+def make_runtime_identity(
+    *,
+    app: str = "mxm_secrets_test",
+    environment: str = "dev",
+    machine: str = "bridge",
+    substrate: str = "local_process",
+    role: str = "marketdata",
+) -> RuntimeIdentity:
+    """Create a RuntimeIdentity for API tests."""
+    return RuntimeIdentity(
+        app=AppId(app),
+        environment=Environment(environment),
+        machine=MachineId(machine),
+        substrate=RuntimeSubstrate(substrate),
+        role=RuntimeRole(role),
+    )
 
 
 def make_secret_ref(
@@ -37,10 +67,23 @@ def make_secret_store(
     )
 
 
+def make_secret_policy(
+    *,
+    name: str = "test_policy",
+    allowed_principals: tuple[str, ...] = ("marketdata",),
+) -> SecretPolicy:
+    """Create a valid SecretPolicy for API tests."""
+    return SecretPolicy(
+        name=name,
+        allowed_principals=allowed_principals,
+    )
+
+
 def make_secrets_api(
     *,
     secret_ref: SecretRef | None = None,
     secret_store: SecretStore | None = None,
+    secret_policy: SecretPolicy | None = None,
 ) -> SecretsApi:
     """Create a SecretsApi with in-memory test registries."""
     return SecretsApi(
@@ -50,14 +93,18 @@ def make_secrets_api(
         secret_store_registry=SecretStoreRegistry(
             [secret_store if secret_store is not None else make_secret_store()]
         ),
+        secret_policy_registry=SecretPolicyRegistry(
+            [secret_policy if secret_policy is not None else make_secret_policy()]
+        ),
     )
 
 
 def test_get_secret_retrieves_configured_secret(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that SecretsApi resolves registries and retrieves via gopass."""
+    """Test that SecretsApi authorizes, resolves, and retrieves via gopass."""
     api = make_secrets_api()
+    identity = make_runtime_identity(role="marketdata")
     observed_key = ""
     observed_default: str | None = None
 
@@ -81,7 +128,11 @@ def test_get_secret_retrieves_configured_secret(
         mock_access_secret,
     )
 
-    result = api.get_secret("test_api_key", default="fallback")
+    result = api.get_secret(
+        "test_api_key",
+        identity=identity,
+        default="fallback",
+    )
 
     assert result == "secret_value"
     assert observed_key == "mxm/red/opaque/test_api_key"
@@ -93,6 +144,7 @@ def test_get_secret_returns_default_when_gopass_unavailable(
 ) -> None:
     """Test that SecretsApi returns default when gopass is unavailable."""
     api = make_secrets_api()
+    identity = make_runtime_identity(role="marketdata")
     access_called = False
 
     def mock_is_gopass_available() -> bool:
@@ -115,7 +167,11 @@ def test_get_secret_returns_default_when_gopass_unavailable(
         mock_access_secret,
     )
 
-    result = api.get_secret("test_api_key", default="fallback")
+    result = api.get_secret(
+        "test_api_key",
+        identity=identity,
+        default="fallback",
+    )
 
     assert result == "fallback"
     assert access_called is False
@@ -124,48 +180,75 @@ def test_get_secret_returns_default_when_gopass_unavailable(
 def test_get_secret_raises_for_unknown_secret_name() -> None:
     """Test that unknown secret names fail at the API boundary."""
     api = make_secrets_api()
+    identity = make_runtime_identity(role="marketdata")
 
     with pytest.raises(KeyError, match="Unknown secret name: missing_secret"):
-        api.get_secret("missing_secret")
+        api.get_secret("missing_secret", identity=identity)
 
 
-def test_get_secret_raises_for_unknown_store_name() -> None:
-    """Test that SecretRefs referencing unknown stores fail at the API boundary."""
-    api = make_secrets_api(secret_ref=make_secret_ref(store="missing_store"))
+def test_get_secret_raises_for_unknown_policy_name() -> None:
+    """Test that SecretRefs referencing unknown policies fail."""
+    api = make_secrets_api(secret_ref=make_secret_ref(policy="missing_policy"))
+    identity = make_runtime_identity(role="marketdata")
 
-    with pytest.raises(KeyError, match="Unknown secret store: missing_store"):
-        api.get_secret("test_api_key")
-
-
-def test_get_secret_raises_for_unsupported_backend() -> None:
-    """Test that non-gopass backends are rejected in the interim API."""
-    api = make_secrets_api(secret_store=make_secret_store(backend="vault"))
-
-    with pytest.raises(ValueError, match="Unsupported secret backend: vault"):
-        api.get_secret("test_api_key")
+    with pytest.raises(KeyError, match="Unknown secret policy: missing_policy"):
+        api.get_secret("test_api_key", identity=identity)
 
 
-def test_get_secret_currently_does_not_enforce_policy(
+def test_get_secret_denies_unauthorized_principal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Document that policy authorization is not yet enforced."""
-    api = make_secrets_api(secret_ref=make_secret_ref(policy="deny_all"))
-
-    def mock_is_gopass_available() -> bool:
-        return True
+    """Test that unauthorized principals are denied before retrieval."""
+    api = make_secrets_api(
+        secret_policy=make_secret_policy(allowed_principals=("execution",))
+    )
+    identity = make_runtime_identity(role="marketdata")
+    access_called = False
 
     def mock_access_secret(key: str, default: str | None = None) -> str:
+        nonlocal access_called
         _ = key
         _ = default
-        return "secret_value"
 
-    monkeypatch.setattr(
-        "mxm.secrets.backends.gopass_backend.is_gopass_available",
-        mock_is_gopass_available,
-    )
+        access_called = True
+        return "should_not_be_used"
+
     monkeypatch.setattr(
         "mxm.secrets.backends.gopass_backend.access_secret",
         mock_access_secret,
     )
 
-    assert api.get_secret("test_api_key") == "secret_value"
+    with pytest.raises(
+        PermissionError,
+        match="Secret access denied: red:test_api_key for principal marketdata",
+    ):
+        api.get_secret("test_api_key", identity=identity)
+
+    assert access_called is False
+
+
+def test_get_secret_raises_for_unknown_store_name() -> None:
+    """Test that SecretRefs referencing unknown stores fail after authorization."""
+    api = make_secrets_api(secret_ref=make_secret_ref(store="missing_store"))
+    identity = make_runtime_identity(role="marketdata")
+
+    with pytest.raises(KeyError, match="Unknown secret store: missing_store"):
+        api.get_secret("test_api_key", identity=identity)
+
+
+def test_get_secret_raises_for_unsupported_backend() -> None:
+    """Test that non-gopass backends are rejected after authorization."""
+    api = make_secrets_api(secret_store=make_secret_store(backend="vault"))
+    identity = make_runtime_identity(role="marketdata")
+
+    with pytest.raises(ValueError, match="Unsupported secret backend: vault"):
+        api.get_secret("test_api_key", identity=identity)
+
+
+def test_get_secret_rejects_invalid_runtime_role() -> None:
+    """Test that invalid RuntimeIdentity roles fail principal construction."""
+    api = make_secrets_api()
+    identity = make_runtime_identity(role="market-data")
+
+    with pytest.raises(ValueError, match="name must match pattern"):
+        api.get_secret("test_api_key", identity=identity)
