@@ -13,6 +13,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 
+from mxm.secrets.config_data import (
+    SecretRefsConfigData,
+    load_secret_refs_from_config_data,
+)
 from mxm.secrets.models import SecretRef
 
 
@@ -50,6 +54,27 @@ class SecretRefRegistry:
             registry[ref.name] = ref
 
         self._refs: Mapping[str, SecretRef] = MappingProxyType(registry)
+
+    @classmethod
+    def from_config_data(
+        cls,
+        config: SecretRefsConfigData,
+    ) -> SecretRefRegistry:
+        """Create a registry from plain secret-reference config data.
+
+        Args:
+            config: Mapping from public secret name to reference configuration.
+
+        Returns:
+            Secret reference registry containing references constructed from
+            the supplied config data.
+
+        Raises:
+            TypeError: If the config data has an invalid structural shape.
+            ValueError: If any configured reference fails validation, or if
+                duplicate reference names are supplied.
+        """
+        return cls(load_secret_refs_from_config_data(config))
 
     def get(self, secret_name: str) -> SecretRef:
         """Return the configured SecretRef for a secret name.

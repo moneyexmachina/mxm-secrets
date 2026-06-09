@@ -9,6 +9,7 @@ from mxm.secrets.registries import (
     SecretRefRegistry,
     SecretStoreRegistry,
 )
+from mxm.types import JSONValue
 from mxm.types.runtime_identity import (
     AppId,
     Environment,
@@ -252,3 +253,116 @@ def test_get_secret_rejects_invalid_runtime_role() -> None:
 
     with pytest.raises(ValueError, match="name must match pattern"):
         api.get_secret("test_api_key", identity=identity)
+
+
+def test_from_config_data_constructs_configured_api() -> None:
+    """from_config_data should construct an API with configured registries."""
+    config: dict[str, JSONValue] = {
+        "stores": {
+            "red": {
+                "backend": "gopass",
+                "root": "mxm/red",
+            },
+        },
+        "refs": {
+            "databento_api_key": {
+                "store": "red",
+                "path": "marketdata/databento/api_key",
+                "policy": "marketdata_access",
+            },
+        },
+        "policies": {
+            "marketdata_access": {
+                "allowed_principals": ["marketdata", "research"],
+            },
+        },
+    }
+
+    api = SecretsApi.from_config_data(config)
+
+    assert api.secret_store_registry.contains("red")
+    assert api.secret_ref_registry.contains("databento_api_key")
+    assert api.secret_policy_registry.contains("marketdata_access")
+
+
+def test_from_config_data_rejects_missing_stores_section() -> None:
+    """from_config_data should require a stores section."""
+    config: dict[str, JSONValue] = {
+        "refs": {},
+        "policies": {},
+    }
+
+    with pytest.raises(TypeError, match="stores"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_rejects_missing_refs_section() -> None:
+    """from_config_data should require a refs section."""
+    config: dict[str, JSONValue] = {
+        "stores": {},
+        "policies": {},
+    }
+
+    with pytest.raises(TypeError, match="refs"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_rejects_missing_policies_section() -> None:
+    """from_config_data should require a policies section."""
+    config: dict[str, JSONValue] = {
+        "stores": {},
+        "refs": {},
+    }
+
+    with pytest.raises(TypeError, match="policies"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_rejects_non_mapping_stores_section() -> None:
+    """from_config_data should require stores to be a mapping."""
+    config: dict[str, JSONValue] = {
+        "stores": "not-a-mapping",
+        "refs": {},
+        "policies": {},
+    }
+
+    with pytest.raises(TypeError, match="stores"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_rejects_non_mapping_refs_section() -> None:
+    """from_config_data should require refs to be a mapping."""
+    config: dict[str, JSONValue] = {
+        "stores": {},
+        "refs": "not-a-mapping",
+        "policies": {},
+    }
+
+    with pytest.raises(TypeError, match="refs"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_rejects_non_mapping_policies_section() -> None:
+    """from_config_data should require policies to be a mapping."""
+    config: dict[str, JSONValue] = {
+        "stores": {},
+        "refs": {},
+        "policies": "not-a-mapping",
+    }
+
+    with pytest.raises(TypeError, match="policies"):
+        SecretsApi.from_config_data(config)
+
+
+def test_from_config_data_propagates_nested_config_errors() -> None:
+    """from_config_data should propagate validation errors from registries."""
+    config: dict[str, JSONValue] = {
+        "stores": {
+            "red": "not-a-mapping",
+        },
+        "refs": {},
+        "policies": {},
+    }
+
+    with pytest.raises(TypeError, match="Secret store config"):
+        SecretsApi.from_config_data(config)

@@ -4,6 +4,7 @@ import pytest
 
 from mxm.secrets.models import SecretRef
 from mxm.secrets.registries import SecretRefRegistry
+from mxm.types import JSONValue
 
 
 def make_secret_ref(
@@ -103,3 +104,34 @@ def test_registry_is_not_affected_by_source_list_mutation() -> None:
     assert registry.contains("first_secret") is True
     assert registry.contains("second_secret") is False
     assert registry.names() == ("first_secret",)
+
+
+def test_from_config_data_creates_registry() -> None:
+    """from_config_data should construct a registry from ref config data."""
+    config: dict[str, JSONValue] = {
+        "databento_api_key": {
+            "store": "red",
+            "path": "marketdata/databento/api_key",
+            "policy": "marketdata_access",
+        },
+    }
+
+    registry = SecretRefRegistry.from_config_data(config)
+
+    assert registry.contains("databento_api_key")
+    assert registry.get("databento_api_key") == SecretRef(
+        name="databento_api_key",
+        store="red",
+        path="marketdata/databento/api_key",
+        policy="marketdata_access",
+    )
+
+
+def test_from_config_data_rejects_invalid_config() -> None:
+    """from_config_data should propagate config-data validation errors."""
+    config: dict[str, JSONValue] = {
+        "databento_api_key": "not-a-mapping",
+    }
+
+    with pytest.raises(TypeError, match="Secret reference config"):
+        SecretRefRegistry.from_config_data(config)

@@ -76,9 +76,12 @@ ResolvedSecretLocation
 Backend Retrieval
 ```
 
-The package does not discover configuration.
+The package accepts plain configuration data and can construct configured
+registries and API instances from that data.
 
-Configuration loading belongs to:
+Configuration discovery and loading remain the responsibility of
+mxm-runtime and mxm-config.
+
 
 ```text
 mxm-runtime
@@ -219,11 +222,45 @@ Callers construct registries and provide them to `SecretsApi`.
 Example:
 
 ```python
-api = SecretsApi(
-    secret_ref_registry=...,
-    secret_store_registry=...,
-    secret_policy_registry=...,
+api = SecretsApi.from_config_data(
+    {
+        "stores": {...},
+        "refs": {...},
+        "policies": {...},
+    }
 )
+```
+Advanced callers may construct registries directly, but the preferred
+construction path is through configuration data.
+
+## Configuration Shape
+
+The package accepts plain configuration data with the structure:
+
+```yaml
+stores:
+  red:
+    backend: gopass
+    root: mxm/red
+
+refs:
+  databento_api_key:
+    store: red
+    path: marketdata/databento/api_key
+    policy: marketdata_access
+
+policies:
+  marketdata_access:
+    allowed_principals:
+      - marketdata
+      - research
+```
+
+This configuration is typically loaded by mxm-runtime from mxm-config
+and passed to:
+
+```python
+SecretsApi.from_config_data(...)
 ```
 
 ### Retrieving a Secret
@@ -382,10 +419,14 @@ Current release status:
 
 ```text
 Resolution Layer Complete
-Materialisation Layer Pending
+Config-Driven Construction Complete
+RuntimeContext Integration Pending
 ```
+mxm-secrets now supports construction of configured registries and
+SecretsApi instances from plain configuration data.
 
-Construction of configured registries from configuration data will be added as part of RuntimeContext materialisation work.
+RuntimeContext materialisation remains the responsibility of
+mxm-runtime.
 
 ## License
 

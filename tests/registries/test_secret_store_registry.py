@@ -4,6 +4,7 @@ import pytest
 
 from mxm.secrets.models import SecretStore
 from mxm.secrets.registries import SecretStoreRegistry
+from mxm.types import JSONValue
 
 
 def make_secret_store(
@@ -98,3 +99,32 @@ def test_registry_is_not_affected_by_source_list_mutation() -> None:
     assert registry.contains("red") is True
     assert registry.contains("yellow") is False
     assert registry.names() == ("red",)
+
+
+def test_from_config_data_creates_registry() -> None:
+    """from_config_data should construct a registry from store config data."""
+    config: dict[str, JSONValue] = {
+        "red": {
+            "backend": "gopass",
+            "root": "mxm/red",
+        },
+    }
+
+    registry = SecretStoreRegistry.from_config_data(config)
+
+    assert registry.contains("red")
+    assert registry.get("red") == SecretStore(
+        name="red",
+        backend="gopass",
+        root="mxm/red",
+    )
+
+
+def test_from_config_data_rejects_invalid_config() -> None:
+    """from_config_data should propagate config-data validation errors."""
+    config: dict[str, JSONValue] = {
+        "red": "not-a-mapping",
+    }
+
+    with pytest.raises(TypeError, match="Secret store config"):
+        SecretStoreRegistry.from_config_data(config)

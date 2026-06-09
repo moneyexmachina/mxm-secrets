@@ -12,6 +12,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 
+from mxm.secrets.config_data import (
+    SecretStoresConfigData,
+    load_secret_stores_from_config_data,
+)
 from mxm.secrets.models import SecretStore
 
 
@@ -49,6 +53,27 @@ class SecretStoreRegistry:
             registry[store.name] = store
 
         self._stores: Mapping[str, SecretStore] = MappingProxyType(registry)
+
+    @classmethod
+    def from_config_data(
+        cls,
+        config: SecretStoresConfigData,
+    ) -> SecretStoreRegistry:
+        """Create a registry from plain secret-store config data.
+
+        Args:
+            config: Mapping from logical store name to store configuration.
+
+        Returns:
+            Secret store registry containing stores constructed from the
+            supplied config data.
+
+        Raises:
+            TypeError: If the config data has an invalid structural shape.
+            ValueError: If any configured store fails validation, or if
+                duplicate store names are supplied.
+        """
+        return cls(load_secret_stores_from_config_data(config))
 
     def get(self, store_name: str) -> SecretStore:
         """Return the configured SecretStore for a store name.

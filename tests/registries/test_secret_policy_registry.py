@@ -4,6 +4,7 @@ import pytest
 
 from mxm.secrets.models import SecretPolicy
 from mxm.secrets.registries import SecretPolicyRegistry
+from mxm.types import JSONValue
 
 
 def make_secret_policy(
@@ -93,3 +94,36 @@ def test_registry_is_not_affected_by_source_list_mutation() -> None:
     assert registry.contains("first_policy") is True
     assert registry.contains("second_policy") is False
     assert registry.names() == ("first_policy",)
+
+
+def test_from_config_data_creates_registry() -> None:
+    """from_config_data should construct a registry from policy config data."""
+    config: dict[str, JSONValue] = {
+        "marketdata_access": {
+            "allowed_principals": [
+                "marketdata",
+                "research",
+            ],
+        },
+    }
+
+    registry = SecretPolicyRegistry.from_config_data(config)
+
+    assert registry.contains("marketdata_access")
+    assert registry.get("marketdata_access") == SecretPolicy(
+        name="marketdata_access",
+        allowed_principals=(
+            "marketdata",
+            "research",
+        ),
+    )
+
+
+def test_from_config_data_rejects_invalid_config() -> None:
+    """from_config_data should propagate config-data validation errors."""
+    config: dict[str, JSONValue] = {
+        "marketdata_access": "not-a-mapping",
+    }
+
+    with pytest.raises(TypeError, match="Secret policy config"):
+        SecretPolicyRegistry.from_config_data(config)

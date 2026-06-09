@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mxm-secrets"
-version = "0.3.0"
+version = "0.3.1"
 description = "Minimal secrets interface for Money Ex Machina, supporting gopass and env backends"
 authors = ["mxm <contact@moneyexmachina.com>"]
 license = "MIT"

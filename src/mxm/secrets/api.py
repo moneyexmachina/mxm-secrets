@@ -18,6 +18,8 @@ from mxm.secrets.authorization import (
     is_secret_access_allowed,
 )
 from mxm.secrets.backends import gopass_backend
+from mxm.secrets.config_data import SecretsConfigData
+from mxm.secrets.config_data.require import require_mapping
 from mxm.secrets.registries import (
     SecretPolicyRegistry,
     SecretRefRegistry,
@@ -54,6 +56,63 @@ class SecretsApi:
     secret_ref_registry: SecretRefRegistry
     secret_store_registry: SecretStoreRegistry
     secret_policy_registry: SecretPolicyRegistry
+
+    @classmethod
+    def from_config_data(
+        cls,
+        config: SecretsConfigData,
+    ) -> SecretsApi:
+        """Construct a configured SecretsApi from plain config data.
+
+        Expected config shape:
+
+        ```yaml
+        stores:
+          ...
+
+        refs:
+          ...
+
+        policies:
+          ...
+        ```
+
+        Args:
+            config: Resolved secrets configuration data.
+
+        Returns:
+            Configured SecretsApi.
+
+        Raises:
+            TypeError: If the config structure is invalid.
+            ValueError: If any configured model fails validation.
+        """
+        stores_config = require_mapping(
+            value=config.get("stores"),
+            description="Secrets config section 'stores'",
+        )
+
+        refs_config = require_mapping(
+            value=config.get("refs"),
+            description="Secrets config section 'refs'",
+        )
+
+        policies_config = require_mapping(
+            value=config.get("policies"),
+            description="Secrets config section 'policies'",
+        )
+
+        return cls(
+            secret_ref_registry=SecretRefRegistry.from_config_data(
+                refs_config,
+            ),
+            secret_store_registry=SecretStoreRegistry.from_config_data(
+                stores_config,
+            ),
+            secret_policy_registry=SecretPolicyRegistry.from_config_data(
+                policies_config,
+            ),
+        )
 
     def get_secret(
         self,

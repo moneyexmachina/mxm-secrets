@@ -13,6 +13,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 
+from mxm.secrets.config_data import (
+    SecretPoliciesConfigData,
+    load_secret_policies_from_config_data,
+)
 from mxm.secrets.models import SecretPolicy
 
 
@@ -50,6 +54,27 @@ class SecretPolicyRegistry:
             registry[policy.name] = policy
 
         self._policies: Mapping[str, SecretPolicy] = MappingProxyType(registry)
+
+    @classmethod
+    def from_config_data(
+        cls,
+        config: SecretPoliciesConfigData,
+    ) -> SecretPolicyRegistry:
+        """Create a registry from plain secret-policy config data.
+
+        Args:
+            config: Mapping from logical policy name to policy configuration.
+
+        Returns:
+            Secret policy registry containing policies constructed from the
+            supplied config data.
+
+        Raises:
+            TypeError: If the config data has an invalid structural shape.
+            ValueError: If any configured policy fails validation, or if
+                duplicate policy names are supplied.
+        """
+        return cls(load_secret_policies_from_config_data(config))
 
     def get(self, policy_name: str) -> SecretPolicy:
         """Return the configured SecretPolicy for a policy name.

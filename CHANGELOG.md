@@ -6,6 +6,49 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+## [0.3.1] - 2026-06-09
+
+### Added
+
+- Added config-data ingestion layer for secret stores, secret references, and secret policies.
+- Added `SecretsApi.from_config_data(...)` as the preferred construction path for configured secret services.
+- Added `SecretStoreRegistry.from_config_data(...)`.
+- Added `SecretRefRegistry.from_config_data(...)`.
+- Added `SecretPolicyRegistry.from_config_data(...)`.
+- Added shared config-data validation helpers for structural configuration validation.
+- Added comprehensive test coverage for:
+  - config-data ingestion,
+  - registry construction from config data,
+  - SecretsApi construction from config data.
+
+### Changed
+
+- Extended the public API to support configuration-driven construction of authorization-aware secret services.
+- Clarified separation of responsibilities between:
+  - `mxm-config` (configuration ownership),
+  - `mxm-secrets` (authorization and resolution semantics),
+  - `mxm-runtime` (service materialisation and RuntimeContext construction).
+
+### Architecture
+
+This release completes the configuration-ingestion layer of the MXM Runtime Context Architecture:
+
+```text
+configuration data
+    ↓
+SecretStore
+SecretRef
+SecretPolicy
+    ↓
+registries
+    ↓
+SecretsApi
+```
+
+`mxm-secrets` now supports construction of fully configured secret-resolution services from plain configuration data while remaining independent of configuration discovery and runtime materialisation concerns.
+
+RuntimeContext integration remains the responsibility of `mxm-runtime`.
+
 ## [0.3.0] - 2026-06-09
 
 ### Added
