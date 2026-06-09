@@ -6,7 +6,294 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+## [0.3.0] - 2026-06-09
 
+### Added
+
+#### Resolution Domain Model
+
+Added explicit secret resolution models:
+
+- `SecretStore`
+- `SecretRef`
+- `ResolvedSecretLocation`
+
+These establish the internal representation of:
+
+```text
+logical store
+logical secret
+resolved backend location
+```
+
+and replace direct dependency on backend paths throughout the package.
+
+---
+
+#### Registry Infrastructure
+
+Added typed registries:
+
+- `SecretStoreRegistry`
+- `SecretRefRegistry`
+- `SecretPolicyRegistry`
+
+The registries provide immutable lookup and validation for configured secret metadata.
+
+---
+
+#### Authorization Domain Model
+
+Added authorization primitives:
+
+- `Principal`
+- `SecretPolicy`
+
+Added explicit authorization vocabulary:
+
+```text
+marketdata
+execution
+research
+human_admin
+```
+
+and policy-based access control through:
+
+```python
+SecretPolicy(
+    name="marketdata_access",
+    allowed_principals=(...)
+)
+```
+
+---
+
+#### Policy Evaluation
+
+Added authorization evaluation layer:
+
+```python
+is_secret_access_allowed(...)
+```
+
+Authorization is now evaluated independently of storage and backend retrieval.
+
+Added:
+
+- policy evaluation tests
+- authorization failure handling
+- policy registry integration
+
+---
+
+#### RuntimeIdentity Integration
+
+Added explicit RuntimeIdentity support.
+
+Secret access now requires:
+
+```python
+RuntimeIdentity
+```
+
+and no longer relies on implicit process identity.
+
+Added:
+
+```python
+principal_from_runtime_identity(...)
+```
+
+Current mapping:
+
+```text
+RuntimeIdentity.role
+    ↓
+Principal
+```
+
+---
+
+#### SecretsApi
+
+Added authorization-aware API orchestration.
+
+`SecretsApi` now performs:
+
+```text
+secret name
+    ↓
+SecretRef
+    ↓
+Principal derivation
+    ↓
+Policy evaluation
+    ↓
+Store resolution
+    ↓
+Backend retrieval
+```
+
+through a single API boundary.
+
+---
+
+#### Validation Infrastructure
+
+Added shared validation utilities:
+
+- `validate_identifier(...)`
+- `validate_non_empty_clean(...)`
+
+Applied consistently across:
+
+- principals
+- secret references
+- secret stores
+- secret policies
+
+---
+
+### Changed
+
+#### Secret Access Architecture
+
+Refactored the package from a backend-oriented secret lookup abstraction into an authorization-aware secret resolution system.
+
+Applications now depend on:
+
+```text
+logical secret names
+```
+
+rather than:
+
+```text
+backend paths
+```
+
+or backend-specific storage semantics.
+
+---
+
+#### Identifier Convention
+
+Standardized identifier semantics across the package.
+
+Adopted:
+
+```text
+snake_case
+```
+
+identifier format:
+
+```text
+^[a-z][a-z0-9_]*$
+```
+
+Examples:
+
+```text
+marketdata
+marketdata_access
+databento_api_key
+human_admin
+```
+
+---
+
+#### Public API Design
+
+Replaced direct secret retrieval patterns with a configured API object:
+
+```python
+SecretsApi(...)
+```
+
+Secret retrieval now requires:
+
+```python
+api.get_secret(
+    secret_name=...,
+    identity=runtime_identity,
+)
+```
+
+---
+
+### Removed
+
+#### Environment Backend
+
+Removed environment variable secret resolution.
+
+The package now supports:
+
+```text
+gopass
+```
+
+as the active backend implementation.
+
+Backend abstraction remains in place for future expansion.
+
+---
+
+#### Implicit Authorization
+
+Removed the assumption that successful backend retrieval implies authorization.
+
+Authorization is now an explicit package responsibility.
+
+---
+
+### Notes
+
+This release completes the Resolution layer of the MXM Runtime Context Architecture.
+
+The package now provides:
+
+```text
+SecretRef
+    ↓
+Authorization
+    ↓
+SecretStore
+    ↓
+Backend Retrieval
+```
+
+through a fully typed and tested API.
+
+Configuration materialisation remains outside package scope and will be introduced through RuntimeContext construction in a future release.
+
+---
+
+### Upgrade Guidance
+
+Direct use of:
+
+```python
+get_secret(...)
+```
+
+should be migrated to:
+
+```python
+SecretsApi(...)
+```
+
+with explicit RuntimeIdentity input.
+
+Applications are expected to consume configured API instances provided by:
+
+```text
+mxm-runtime
+```
+
+rather than constructing production secret infrastructure directly.
 ## [0.2.0] - 2026-05-12
 
 ### Added
