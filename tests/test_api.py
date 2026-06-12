@@ -11,12 +11,7 @@ from mxm.secrets.registries import (
 )
 from mxm.types import JSONValue
 from mxm.types.runtime_identity import (
-    AppId,
-    Environment,
-    MachineId,
     RuntimeIdentity,
-    RuntimeRole,
-    RuntimeSubstrate,
 )
 
 
@@ -30,11 +25,11 @@ def make_runtime_identity(
 ) -> RuntimeIdentity:
     """Create a RuntimeIdentity for API tests."""
     return RuntimeIdentity(
-        app=AppId(app),
-        environment=Environment(environment),
-        machine=MachineId(machine),
-        substrate=RuntimeSubstrate(substrate),
-        role=RuntimeRole(role),
+        app=app,
+        environment=environment,
+        machine=machine,
+        substrate=substrate,
+        role=role,
     )
 
 

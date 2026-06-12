@@ -5,12 +5,7 @@ import pytest
 from mxm.secrets.models import Principal
 from mxm.secrets.resolution import principal_from_runtime_identity
 from mxm.types.runtime_identity import (
-    AppId,
-    Environment,
-    MachineId,
     RuntimeIdentity,
-    RuntimeRole,
-    RuntimeSubstrate,
 )
 
 
@@ -24,11 +19,11 @@ def make_runtime_identity(
 ) -> RuntimeIdentity:
     """Create a valid RuntimeIdentity for principal resolution tests."""
     return RuntimeIdentity(
-        app=AppId(app_id),
-        environment=Environment(environment),
-        machine=MachineId(machine),
-        substrate=RuntimeSubstrate(substrate),
-        role=RuntimeRole(role),
+        app=app_id,
+        environment=environment,
+        machine=machine,
+        substrate=substrate,
+        role=role,
     )
 
 

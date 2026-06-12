@@ -6,6 +6,59 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+## [0.3.2] - 2026-06-12
+
+### Changed
+
+- Updated dependency on `mxm-types` to v0.3.1.
+- Adopted simplified `RuntimeIdentity` typing based on validated string identifiers.
+- Removed dependency on custom runtime identifier alias types throughout the authorization and resolution layers.
+
+### Architecture
+
+`mxm-secrets` now consumes the simplified `RuntimeIdentity` model introduced in `mxm-types` v0.3.1.
+
+Runtime identity dimensions:
+
+```text
+app
+environment
+machine
+substrate
+role
+```
+
+are now represented directly as validated strings.
+
+This simplifies integration with:
+
+```text
+runtime identity discovery
+configuration loading
+tests
+CLI tooling
+RuntimeContext materialisation
+```
+
+while preserving all authorization and secret-resolution semantics.
+
+### Internal
+
+- Simplified RuntimeIdentity construction in tests.
+- Removed unnecessary type-conversion helpers introduced solely to satisfy custom runtime identifier aliases.
+- Reduced friction at package boundaries between:
+  - `mxm-config`
+  - `mxm-runtime`
+  - `mxm-secrets`
+
+### Compatibility
+
+No configuration format changes.
+
+No secret-resolution behaviour changes.
+
+No public API changes beyond adoption of the simplified `RuntimeIdentity` type definitions provided by `mxm-types` v0.3.1.
+
 ## [0.3.1] - 2026-06-09
 
 ### Added
